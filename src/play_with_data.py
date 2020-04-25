@@ -2,7 +2,7 @@ import os
 
 import pandas as pd
 
-root = os.path.join('data', 'train')
+root = os.path.join('../data', 'train')
 
 landmark_file_name = os.path.join(root, 'landmarks.csv')
 images_root = os.path.join(root, "images")
