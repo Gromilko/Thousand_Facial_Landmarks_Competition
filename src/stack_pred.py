@@ -1,25 +1,32 @@
 import pandas as pd
 from tqdm import tqdm
 
-submit_list = ['../stack/resnet152_pretrain3ep_plus_6ep_bs160_ep8_loss1.5298880638505576_best_submit.csv',
-               '../stack/resnet101_pretrain_bs240_ep14_loss1.527_submit.csv',
-                '../stack/resnet50_pretrain_bs350_submit.csv',
-               '../history/weights/resnet50_layer_wise/ep49_loss1.636_submit.csv',
-               '../stack/resnet152_pretrain3ep_plus_6ep_8ep_bs160_ep4_loss1.508120443105214_best_submit.csv']
+submit_list = ['../stack/resnet152_pretrain3ep_plus_6ep_bs160_ep8_loss1.5298880638505576_best_submit.csv',  # 9.51835
+               '../stack/resnet101_pretrain_bs240_ep14_loss1.527_submit.csv',  # 9.32149
+               '../stack/resnet50_pretrain_bs350_submit.csv',  # 9.61028
+               # '../history/weights/resnet50_layer_wise/ep49_loss1.636_submit.csv',  # 10.03305
+               # '../history/weights/resnet50_layer_wise_start_38/ep7_loss1.619_submit.csv',  # 10.16668 stack 6
+               '../stack/resnet152_pretrain3ep_plus_6ep_8ep_bs160_ep4_loss1.508120443105214_best_submit.csv',  # 9.47133
+               '../history/weights/resnet101_layer_wise/ep11_loss1.533_submit.csv',  # 9.45345
+               # '../history/weights/resneXt101_234layer/ep18_loss1.54_submit.csv' # 9.92340
+               '../history/weights/resneXt101_pretrain_start_18/ep6_loss1.503_submit.csv'  # 9.62907
+               ]
 
-df_0 = pd.read_csv(submit_list[0])
-df_1 = pd.read_csv(submit_list[1])
-df_2 = pd.read_csv(submit_list[2])
-df_3 = pd.read_csv(submit_list[3])
-df_4 = pd.read_csv(submit_list[4])
+dfs_list = []
 
-columns = df_0.columns[1:]
+for path in submit_list:
+    dfs_list.append(pd.read_csv(path))
+
+columns = dfs_list[0].columns[1:]
 
 for col_name in tqdm(columns):
-    df_0[col_name] = round((df_0[col_name] + df_1[col_name] +
-                            df_2[col_name] + df_3[col_name] +
-                            df_4[col_name])/5).astype('int32')
+    a = dfs_list[0][col_name]
+    for df in dfs_list[1:]:
+        a += df[col_name]
+    a /= len(dfs_list)
 
-df_0.to_csv('stack_5.csv', index=False)
+    dfs_list[0][col_name] = round(a).astype('int32')
+
+dfs_list[0].to_csv('stack_6_plus_resnext101.csv', index=False)
 
 print('vse')

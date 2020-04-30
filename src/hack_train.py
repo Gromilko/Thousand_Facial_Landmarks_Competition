@@ -9,10 +9,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torchvision
 import torchvision.models as models
 import tqdm
 from torch.nn import functional as fnn
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, CyclicLR
 from torch.utils import data
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
@@ -109,8 +110,9 @@ class Trainer:
         self.hist_dir = os.path.join('history', 'weights', args.name)
 
         self.scheduler = ReduceLROnPlateau(self.optimizer, mode="min", patience=3, verbose=True)
+        # self.scheduler = CyclicLR(self.optimizer, )
 
-        self.early_stopping = EarlyStopping(patience=3, verbose=True)
+        self.early_stopping = EarlyStopping(patience=4, verbose=True)
 
         for phase in ["train", "val"]:
             print(f'{phase} dataset len=', len(self.dataloaders[phase]))
@@ -146,7 +148,6 @@ class Trainer:
                     torch.save(self.model.state_dict(), fp)
 
         return epoch+1
-
 
 train_transforms = transforms.Compose([
     ScaleMinSideToSize((CROP_SIZE, CROP_SIZE)),
@@ -198,8 +199,13 @@ def main(args):
         print()
 
     print("Creating model...")
-    model = models.resnet50(pretrained=True, )
+    model = models.resnext101_32x8d(pretrained=True, )
     model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
+
+    name = 'history/weights/resneXt101_234layer/ep18_loss1.54'
+    with open(f"{name}.pth", "rb") as fp:
+        best_state_dict = torch.load(fp, map_location="cpu")
+        model.load_state_dict(best_state_dict)
 
     # freeze all layers
     for param in model.parameters():
@@ -213,11 +219,11 @@ def main(args):
 
     # trainer = Trainer(model, dataloaders)
     # get_stat(model)
-    # # args.epochs = 10
+    # args.epochs = 5
     # end_epoch = trainer.start()
 
     # print('train layer4 and head')
-    # args.epochs = 20
+    # args.epochs = 10
     # train only head
     for param in model.layer4.parameters():
         param.requires_grad = True
@@ -231,23 +237,24 @@ def main(args):
     for param in model.layer3.parameters():
         param.requires_grad = True
 
+    # args.epochs = 15
     # trainer = Trainer(model, dataloaders)
     # get_stat(model)
     # end_epoch = trainer.start(start_with=end_epoch)
 
-    # print('train layer2 and head')
+    print('train layer2 and head')
     # train only head
     for param in model.layer2.parameters():
         param.requires_grad = True
 
-    with open(f"history/weights/resnet50_layer_wise/ep38_loss1.745.pth", "rb") as fp:
-        best_state_dict = torch.load(fp, map_location="cpu")
-        model.load_state_dict(best_state_dict)
+    # with open(f"history/weights/resnet50_layer_wise/ep38_loss1.745.pth", "rb") as fp:
+    #     best_state_dict = torch.load(fp, map_location="cpu")
+    #     model.load_state_dict(best_state_dict)
 
+    args.epochs = 20
     trainer = Trainer(model, dataloaders)
     get_stat(model)
     end_epoch = trainer.start()
-
 
     input('vse')
     # 3. predict
