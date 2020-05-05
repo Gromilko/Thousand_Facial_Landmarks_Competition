@@ -20,9 +20,8 @@ from torchvision import transforms
 
 from src.EarlyStopping import EarlyStopping
 from src.hack_utils import NUM_PTS, CROP_SIZE
-from src.hack_utils import ScaleMinSideToSize, CropCenter, TransformByKeys
+from src.hack_utils import ScaleMinSideToSize, CropCenter, TransformByKeys, HorizontalFlip
 from src.hack_utils import ThousandLandmarksDataset
-from src.hack_utils import restore_landmarks_batch
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -75,25 +74,6 @@ def validate(model, loader, loss_fn, device):
         val_loss.append(loss.item())
 
     return np.mean(val_loss)
-
-
-def predict(model, loader, device):
-    model.eval()
-    predictions = np.zeros((len(loader.dataset), NUM_PTS, 2))
-    for i, batch in enumerate(tqdm.tqdm(loader, total=len(loader), desc="test prediction...")):
-        images = batch["image"].to(device)
-
-        with torch.no_grad():
-            pred_landmarks = model(images).cpu()
-        pred_landmarks = pred_landmarks.numpy().reshape((len(pred_landmarks), NUM_PTS, 2))  # B x NUM_PTS x 2
-
-        fs = batch["scale_coef"].numpy()  # B
-        margins_x = batch["crop_margin_x"].numpy()  # B
-        margins_y = batch["crop_margin_y"].numpy()  # B
-        prediction = restore_landmarks_batch(pred_landmarks, fs, margins_x, margins_y)  # B x NUM_PTS x 2
-        predictions[i * loader.batch_size: (i + 1) * loader.batch_size] = prediction
-
-    return predictions
 
 
 class Trainer:
@@ -152,6 +132,7 @@ class Trainer:
 train_transforms = transforms.Compose([
     ScaleMinSideToSize((CROP_SIZE, CROP_SIZE)),
     CropCenter(CROP_SIZE),
+    HorizontalFlip(0.5),
     TransformByKeys(transforms.ToPILImage(), ("image",)),
     TransformByKeys(transforms.ToTensor(), ("image",)),
     TransformByKeys(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]), ("image",)),
@@ -177,36 +158,28 @@ def data_provider(split=None):
     return dataloader
 
 
-def main(args):
-    def get_stat(model):
-        print()
-        count = 0
-        for param in model.parameters():
+def get_stat(model):
+    print()
+    count = 0
+    for param in model.parameters():
+        count += 1
+    print('Вcего параметров', count)
+
+    count = 0
+    for param in model.parameters():
+        if param.requires_grad:
             count += 1
-        print('Вcего параметров', count)
+    print('True параметров', count)
 
-        count = 0
-        for param in model.parameters():
-            if param.requires_grad:
-                count += 1
-        print('True параметров', count)
+    count = 0
+    for param in model.parameters():
+        if not param.requires_grad:
+            count += 1
+    print('False параметров', count)
+    print()
 
-        count = 0
-        for param in model.parameters():
-            if not param.requires_grad:
-                count += 1
-        print('False параметров', count)
-        print()
 
-    print("Creating model...")
-    model = models.resnext101_32x8d(pretrained=True, )
-    model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
-
-    name = 'history/weights/resneXt101_234layer/ep18_loss1.54'
-    with open(f"{name}.pth", "rb") as fp:
-        best_state_dict = torch.load(fp, map_location="cpu")
-        model.load_state_dict(best_state_dict)
-
+def freeze_layers(model):
     # freeze all layers
     for param in model.parameters():
         param.requires_grad = False
@@ -214,8 +187,6 @@ def main(args):
     # print('train only head')
     model.fc.weight.requires_grad = True
     model.fc.bias.requires_grad = True
-
-    dataloaders = {phase: data_provider(phase) for phase in ["train", "val"]}
 
     # trainer = Trainer(model, dataloaders)
     # get_stat(model)
@@ -251,30 +222,28 @@ def main(args):
     #     best_state_dict = torch.load(fp, map_location="cpu")
     #     model.load_state_dict(best_state_dict)
 
+
+def main(args):
+    args.batch_size = 4
+    dataloader = data_provider("train")
+
+    print("Creating model...")
+    model = models.resnext101_32x8d(pretrained=True, )
+    model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
+
+    name = 'history/weights/resneXt101_234layer/ep18_loss1.54'
+    with open(f"{name}.pth", "rb") as fp:
+        best_state_dict = torch.load(fp, map_location="cpu")
+        model.load_state_dict(best_state_dict)
+
+    dataloaders = {phase: data_provider(phase) for phase in ["train", "val"]}
+
     args.epochs = 20
     trainer = Trainer(model, dataloaders)
     get_stat(model)
     end_epoch = trainer.start()
 
     input('vse')
-    # 3. predict
-    # test_dataset = ThousandLandmarksDataset(os.path.join(args.data, 'test'), train_transforms, split="test")
-    # test_dataloader = data.DataLoader(test_dataset, batch_size=args.batch_size, num_workers=0, pin_memory=True,
-    #                                   shuffle=False, drop_last=False)
-    #
-    #
-    # print('Test dataset len=', len(val_dataset))
-    #
-    # with open(f"{args.name}_best.pth", "rb") as fp:
-    #     best_state_dict = torch.load(fp, map_location="cpu")
-    #     model.load_state_dict(best_state_dict)
-    #
-    # test_predictions = predict(model, test_dataloader, device)
-    # with open(f"{args.name}_test_predictions.pkl", "wb") as fp:
-    #     pickle.dump({"image_names": test_dataset.image_names,
-    #                  "landmarks": test_predictions}, fp)
-    #
-    # create_submission(args.data, test_predictions, f"{args.name}_submit.csv")
 
 
 if __name__ == '__main__':

@@ -6,6 +6,8 @@ import pandas as pd
 import torch
 from torch.utils import data
 
+import albumentations as albu
+
 np.random.seed(1234)
 torch.manual_seed(1234)
 
@@ -38,6 +40,23 @@ class ScaleMinSideToSize(object):
             landmarks = landmarks * f
             sample['landmarks'] = landmarks.reshape(-1)
 
+        return sample
+
+
+class HorizontalFlip(object):
+    def __init__(self, p=0.5, elem_name='image'):
+        self.p = p
+        self.elem_name = elem_name
+
+    def __call__(self, sample):
+        # pred_landmarks = pred_landmarks.numpy().reshape((len(pred_landmarks), NUM_PTS, 2))
+        augmented = albu.Compose([albu.HorizontalFlip(p=self.p)],
+                                 keypoint_params=albu.KeypointParams(format='xy')
+                                 )(force_apply=True,
+                                   image=sample[self.elem_name],
+                                   keypoints=torch.reshape(sample['landmarks'], (NUM_PTS, 2)))
+
+        sample[self.elem_name], sample['landmarks'] = augmented['image'], torch.reshape(augmented['keypoints'], (NUM_PTS*2))
         return sample
 
 
