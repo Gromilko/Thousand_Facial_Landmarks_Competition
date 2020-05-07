@@ -9,8 +9,16 @@ submit_list = ['../stack/resnet152_pretrain3ep_plus_6ep_bs160_ep8_loss1.52988806
                '../stack/resnet152_pretrain3ep_plus_6ep_8ep_bs160_ep4_loss1.508120443105214_best_submit.csv',  # 9.47133
                '../history/weights/resnet101_layer_wise/ep11_loss1.533_submit.csv',  # 9.45345
                # '../history/weights/resneXt101_234layer/ep18_loss1.54_submit.csv' # 9.92340
-               '../history/weights/resneXt101_pretrain_start_18/ep6_loss1.503_submit.csv'  # 9.62907
+               '../history/weights/resneXt101_pretrain_start_18/ep6_loss1.503_submit.csv',  # 9.62907
+               '../src/stack_3_fold.csv'  # 9.19270
                ]
+
+# submit_list = ['../history/weights/5folds_resnet_50_bs_256/fold0_ep26_loss1.611_submit.csv',
+#                '../history/weights/5folds_resnet_50_bs_256/fold1_ep24_loss1.576_submit.csv',
+#                '../history/weights/5folds_resnet_50_bs_256/fold2_ep27_loss1.622_submit.csv',
+#
+#                ]
+
 
 dfs_list = []
 
@@ -27,6 +35,6 @@ for col_name in tqdm(columns):
 
     dfs_list[0][col_name] = round(a).astype('int32')
 
-dfs_list[0].to_csv('stack_6_plus_resnext101.csv', index=False)
+dfs_list[0].to_csv('stack_3_fold_plus_other.csv', index=False)
 
 print('vse')

@@ -77,11 +77,13 @@ def validate(model, loader, loss_fn, device):
 
 
 class Trainer:
-    def __init__(self, model, dataloaders):
+    def __init__(self, model, fold):
         self.device = torch.device("cuda: 0") if args.gpu else torch.device("cpu")
         self.model = model.to(self.device)
 
-        self.dataloaders = dataloaders
+        self.fold = fold
+
+        self.dataloaders = {phase: data_provider(phase, fold) for phase in ["train", "val"]}
 
         self.optimizer = optim.Adam([p for p in model.parameters() if p.requires_grad],
                                     lr=args.learning_rate, amsgrad=True)
@@ -92,7 +94,7 @@ class Trainer:
         self.scheduler = ReduceLROnPlateau(self.optimizer, mode="min", patience=3, verbose=True)
         # self.scheduler = CyclicLR(self.optimizer, )
 
-        self.early_stopping = EarlyStopping(patience=4, verbose=True)
+        self.early_stopping = EarlyStopping(patience=5, verbose=True)
 
         for phase in ["train", "val"]:
             print(f'{phase} dataset len=', len(self.dataloaders[phase]))
@@ -124,31 +126,32 @@ class Trainer:
                 best_val_loss = val_loss
                 if not os.path.exists(self.hist_dir):
                     os.mkdir(self.hist_dir)
-                with open(os.path.join(self.hist_dir, "ep{}_loss{:.4}.pth".format(epoch, val_loss)), "wb") as fp:
+                with open(os.path.join(self.hist_dir, "fold{}_ep{}_loss{:.4}.pth".format(self.fold, epoch, val_loss)), "wb") as fp:
                     torch.save(self.model.state_dict(), fp)
 
-        return epoch+1
+        return epoch + 1
+
 
 train_transforms = transforms.Compose([
     ScaleMinSideToSize((CROP_SIZE, CROP_SIZE)),
     CropCenter(CROP_SIZE),
-    HorizontalFlip(0.5),
+    # HorizontalFlip(0.5),
     TransformByKeys(transforms.ToPILImage(), ("image",)),
     TransformByKeys(transforms.ToTensor(), ("image",)),
     TransformByKeys(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]), ("image",)),
 ])
 
 
-def data_provider(split=None):
-    print(f"Reading {split} data...")
+def data_provider(split=None, fold=None):
+    print(f"Reading {split} data for fold={fold}...")
     if split == "train":
         train_dataset = ThousandLandmarksDataset(os.path.join(args.data, 'train'),
-                                                 train_transforms, split="train")
+                                                 train_transforms, split="train", fold=fold)
         dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=0,
                                      pin_memory=True, shuffle=True, drop_last=True)
     elif split == "val":
         val_dataset = ThousandLandmarksDataset(os.path.join(args.data, 'train'),
-                                               train_transforms, split="val")
+                                               train_transforms, split="val", fold=fold)
         dataloader = data.DataLoader(val_dataset, batch_size=args.batch_size, num_workers=0,
                                      pin_memory=True, shuffle=False, drop_last=False)
     else:
@@ -224,24 +227,20 @@ def freeze_layers(model):
 
 
 def main(args):
-    args.batch_size = 4
-    dataloader = data_provider("train")
+    for fold in range(1, 5):
+        print("Creating model...")
+        model = models.resnet50(pretrained=True, )
+        model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
 
-    print("Creating model...")
-    model = models.resnext101_32x8d(pretrained=True, )
-    model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
+        # name = 'history/weights/resneXt101_234layer/ep18_loss1.54'
+        # with open(f"{name}.pth", "rb") as fp:
+        #     best_state_dict = torch.load(fp, map_location="cpu")
+        #     model.load_state_dict(best_state_dict)
 
-    name = 'history/weights/resneXt101_234layer/ep18_loss1.54'
-    with open(f"{name}.pth", "rb") as fp:
-        best_state_dict = torch.load(fp, map_location="cpu")
-        model.load_state_dict(best_state_dict)
-
-    dataloaders = {phase: data_provider(phase) for phase in ["train", "val"]}
-
-    args.epochs = 20
-    trainer = Trainer(model, dataloaders)
-    get_stat(model)
-    end_epoch = trainer.start()
+        args.epochs = 30
+        trainer = Trainer(model, fold=fold)
+        get_stat(model)
+        end_epoch = trainer.start()
 
     input('vse')
 

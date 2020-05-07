@@ -74,16 +74,18 @@ class Predictor:
 
 print("Creating model...")
 device = torch.device("cuda: 0")
-model = models.resnext101_32x8d(pretrained=True)
+torch.cuda.set_device(device)
+
+model = models.resnet50(pretrained=True)
 model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
 model.to(device)
 
 # 3. predict
 test_dataset = ThousandLandmarksDataset(os.path.join('../data', 'test'), train_transforms, split="test")
-test_dataloader = data.DataLoader(test_dataset, batch_size=256, num_workers=0, pin_memory=True,
+test_dataloader = data.DataLoader(test_dataset, batch_size=128, num_workers=0, pin_memory=True,
                                   shuffle=False, drop_last=False)
 
-name = '../history/weights/resneXt101_pretrain_start_18/ep6_loss1.503'
+name = '../history/weights/5folds_resnet_50_bs_256/fold2_ep27_loss1.622'
 with open(f"{name}.pth", "rb") as fp:
     best_state_dict = torch.load(fp, map_location="cpu")
     model.load_state_dict(best_state_dict)
@@ -91,8 +93,8 @@ with open(f"{name}.pth", "rb") as fp:
 predictor = Predictor(model, test_dataloader, device)
 test_predictions = predictor(tta=False)
 
-with open(f"{name}_test_predictions.pkl", "wb") as fp:
-    pickle.dump({"image_names": test_dataset.image_names,
-                 "landmarks": test_predictions}, fp)
+# with open(f"{name}_test_predictions.pkl", "wb") as fp:
+#     pickle.dump({"image_names": test_dataset.image_names,
+#                  "landmarks": test_predictions}, fp)
 
-create_submission('../data', test_predictions, f"{name}_tta_submit.csv")
+create_submission('../data', test_predictions, f"{name}_submit.csv")

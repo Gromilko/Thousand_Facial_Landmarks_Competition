@@ -4,7 +4,10 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
+import tqdm
 from torch.utils import data
+
+from sklearn.model_selection import KFold
 
 import albumentations as albu
 
@@ -97,52 +100,106 @@ class TransformByKeys(object):
 
 class ThousandLandmarksDataset(data.Dataset):
 
-    def __init__(self, root, transforms, split="train"):
+    def __init__(self, root, transforms, split="train", fold=None):
         super(ThousandLandmarksDataset, self).__init__()
         self.root = root
         landmark_file_name = os.path.join(root, 'landmarks.csv') if split is not "test" \
             else os.path.join(root, "test_points.csv")
         images_root = os.path.join(root, "images")
 
-        # 393930 the number of rows in the training dataset
-        # change to a smaller number if you need to learn from a piece of data
-        n_rows = LEN_DF if split is not "test" else None
-        print(f"Cook {split} data from csv...")
-
-        df_chunk = pd.read_csv(landmark_file_name, nrows=n_rows, chunksize=CHUNK_SIZE, delimiter='\t', )
-        self.landmarks = []
         self.image_names = []
+        self.landmarks = []
 
-        print(f"Chunk...", end=' ')
-        for i, chunk in enumerate(df_chunk):
-            split_idxs = {"train": range(0, int(TRAIN_SIZE * len(chunk))),
-                          "val": range(int(TRAIN_SIZE * len(chunk)), len(chunk)),
-                          "test": range(len(chunk))}
-            idxs = split_idxs[split]
+        with open(landmark_file_name, "rt") as fp:
+            num_lines = sum(1 for line in fp)
 
-            print(f'{i}...', end=' ')
-            if split in ("train", "val"):
-                for row in chunk._values[idxs]:
-                    self.image_names.append(os.path.join(images_root, row[0]))
-                    self.landmarks.append(row[1:].astype('int32').reshape((len(row) // 2, 2)))
-            elif split == 'test':
-                for row in chunk._values[idxs]:
-                    self.image_names.append(os.path.join(images_root, row[0]))
-                self.landmarks = None
-            else:
-                raise NotImplementedError(split)
-        print(f'finish')
+        print(f"N_rows: {num_lines}")
+
+        train_set = set()
+        val_set = set()
+
+        kf = KFold(n_splits=5, random_state=42, shuffle=True)
+        for i, (train_index, val_index) in enumerate(kf.split(range(num_lines))):
+            if i == fold:
+                train_set.update(set(train_index))
+                val_set.update(set(val_index))
+                print(f"Spliting data for fold {fold}. TRAIN: {len(train_index)}. TEST: {len(val_index)}")
+                break
+
+        num_lines -= 1  # header
+
+        with open(landmark_file_name, "rt") as fp:
+            for i, line in tqdm.tqdm(enumerate(fp)):
+                if i == 0:
+                    continue  # skip header
+                if split == "train" and i not in train_set:  # == int(TRAIN_SIZE * num_lines):
+                    continue  # reached end of train part of data
+                elif split == "val" and i not in val_set:  # < int(TRAIN_SIZE * num_lines):
+                    continue  # has not reached start of val part of data
+                elements = line.strip().split("\t")
+                image_name = os.path.join(images_root, elements[0])
+                self.image_names.append(image_name)
+
+                if split in ("train", "val"):
+                    landmarks = list(map(np.int16, elements[1:]))
+                    landmarks = np.array(landmarks, dtype=np.int16).reshape((len(landmarks) // 2, 2))
+                    self.landmarks.append(landmarks)
 
         print('Convert to tensor...', end=' ')
         if split in ("train", "val"):
             self.landmarks = torch.as_tensor(self.landmarks)
-        elif split == 'test':
-            self.landmarks = None
         else:
-            raise NotImplementedError(split)
+            self.landmarks = None
 
         self.transforms = transforms
-        print('finish')
+        print(f'finish')
+
+    # def __init__(self, root, transforms, split="train", **kwargs):
+    #     super(ThousandLandmarksDataset, self).__init__()
+    #     self.root = root
+    #     landmark_file_name = os.path.join(root, 'landmarks.csv') if split is not "test" \
+    #         else os.path.join(root, "test_points.csv")
+    #     images_root = os.path.join(root, "images")
+    #
+    #     # 393930 the number of rows in the training dataset
+    #     # change to a smaller number if you need to learn from a piece of data
+    #     n_rows = 2048 if split is not "test" else None
+    #     print(f"Cook {split} data from csv...")
+    #
+    #     df_chunk = pd.read_csv(landmark_file_name, nrows=n_rows, chunksize=CHUNK_SIZE, delimiter='\t', )
+    #     self.landmarks = []
+    #     self.image_names = []
+    #
+    #     print(f"Chunk...", end=' ')
+    #     for i, chunk in enumerate(df_chunk):
+    #         split_idxs = {"train": range(0, int(TRAIN_SIZE * len(chunk))),
+    #                       "val": range(int(TRAIN_SIZE * len(chunk)), len(chunk)),
+    #                       "test": range(len(chunk))}
+    #         idxs = split_idxs[split]
+    #
+    #         print(f'{i}...', end=' ')
+    #         if split in ("train", "val"):
+    #             for row in chunk._values[idxs]:
+    #                 self.image_names.append(os.path.join(images_root, row[0]))
+    #                 self.landmarks.append(row[1:].astype('int32').reshape((len(row) // 2, 2)))
+    #         elif split == 'test':
+    #             for row in chunk._values[idxs]:
+    #                 self.image_names.append(os.path.join(images_root, row[0]))
+    #             self.landmarks = None
+    #         else:
+    #             raise NotImplementedError(split)
+    #     print(f'finish')
+    #
+    #     print('Convert to tensor...', end=' ')
+    #     if split in ("train", "val"):
+    #         self.landmarks = torch.as_tensor(self.landmarks)
+    #     elif split == 'test':
+    #         self.landmarks = None
+    #     else:
+    #         raise NotImplementedError(split)
+    #
+    #     self.transforms = transforms
+    #     print('finish')
 
     def __getitem__(self, idx):
         sample = {}
