@@ -130,6 +130,8 @@ class ThousandLandmarksDataset(data.Dataset):
 
         with open(landmark_file_name, "rt") as fp:
             for i, line in tqdm.tqdm(enumerate(fp)):
+                if i > 256:
+                    break
                 if i == 0:
                     continue  # skip header
                 if split == "train" and i not in train_set:  # == int(TRAIN_SIZE * num_lines):
