@@ -17,6 +17,8 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, CyclicLR
 from torch.utils import data
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
+from torchvision.models._utils import IntermediateLayerGetter
+
 
 from src.EarlyStopping import EarlyStopping
 from src.hack_utils import NUM_PTS, CROP_SIZE
@@ -112,22 +114,25 @@ class Trainer:
 
             print("Epoch #{:2}:\ttrain loss: {:7.4}\tval loss: {:7.4}".format(epoch, train_loss, val_loss))
 
-            self.scheduler.step(val_loss, epoch)
-            self.early_stopping(val_loss, self.model)
-
-            if self.early_stopping.early_stop:
-                print("Early stopping")
-                break
+            # self.scheduler.step(val_loss, epoch)
+            # self.early_stopping(val_loss, self.model)
+            #
+            # if self.early_stopping.early_stop:
+            #     print("Early stopping")
+            #     break
 
             for group_num, param_group in enumerate(self.optimizer.param_groups):
                 writer.add_scalar('lr/{}'.format(group_num), param_group['lr'], epoch)
 
-            if val_loss <= best_val_loss:
-                best_val_loss = val_loss
-                if not os.path.exists(self.hist_dir):
-                    os.mkdir(self.hist_dir)
-                with open(os.path.join(self.hist_dir, "fold{}_ep{}_loss{:.4}.pth".format(self.fold, epoch, val_loss)), "wb") as fp:
-                    torch.save(self.model.state_dict(), fp)
+            # if val_loss <= best_val_loss:
+            best_val_loss = val_loss
+            if not os.path.exists(self.hist_dir):
+                os.mkdir(self.hist_dir)
+            with open(os.path.join(self.hist_dir, "fold{}_ep{}_loss{:.4}.pth".format(self.fold, epoch, val_loss)), "wb") as fp:
+                torch.save(self.model.state_dict(), fp)
+
+        with open(os.path.join(self.hist_dir, "finish.pth"), "wb") as fp:
+            torch.save(self.model.state_dict(), fp)
 
         return epoch + 1
 
@@ -226,18 +231,32 @@ def freeze_layers(model):
     #     model.load_state_dict(best_state_dict)
 
 
+
 def main(args):
-    for fold in range(1, 5):
+    # model = torchvision.models.(pretrained=True)
+    # # https://discuss.pytorch.org/t/how-to-perform-finetuning-in-pytorch/419/19
+    # features = nn.Sequential(*list(model.children())[:-2])
+    # out = features(torch.rand(1, 3, 224, 224))
+    # # extract layer1 and layer3, giving as names `feat1` and feat2`
+    # return_layers = {'conv1': 'conv1', 'maxpool': 'maxpool',   'layer1': '1', 'layer2': '2', 'layer3': '3', 'layer4': '4'}
+    # new_m = torchvision.models._utils.IntermediateLayerGetter(model, return_layers=return_layers)
+    # out = new_m(torch.rand(1, 3, 224, 224))
+    # print([(k, v.shape) for k, v in out.items()])
+
+    for fold in range(0, 1):
         print("Creating model...")
-        model = models.resnet50(pretrained=True, )
+        model = models.resnet101(pretrained=True, )
         model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
+
+        # models.detection.keypointrcnn_resnet50_fpn()
 
         # name = 'history/weights/resneXt101_234layer/ep18_loss1.54'
         # with open(f"{name}.pth", "rb") as fp:
         #     best_state_dict = torch.load(fp, map_location="cpu")
         #     model.load_state_dict(best_state_dict)
 
-        args.epochs = 30
+        args.epochs = 23
+        args.batch_size = 240
         trainer = Trainer(model, fold=fold)
         get_stat(model)
         end_epoch = trainer.start()

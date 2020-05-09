@@ -14,7 +14,7 @@ import albumentations as albu
 np.random.seed(1234)
 torch.manual_seed(1234)
 
-TRAIN_SIZE = 0.8
+TRAIN_SIZE = 0.95
 NUM_PTS = 971
 CROP_SIZE = 128
 SUBMISSION_HEADER = "file_name,Point_M0_X,Point_M0_Y,Point_M1_X,Point_M1_Y,Point_M2_X,Point_M2_Y,Point_M3_X,Point_M3_Y,Point_M4_X,Point_M4_Y,Point_M5_X,Point_M5_Y,Point_M6_X,Point_M6_Y,Point_M7_X,Point_M7_Y,Point_M8_X,Point_M8_Y,Point_M9_X,Point_M9_Y,Point_M10_X,Point_M10_Y,Point_M11_X,Point_M11_Y,Point_M12_X,Point_M12_Y,Point_M13_X,Point_M13_Y,Point_M14_X,Point_M14_Y,Point_M15_X,Point_M15_Y,Point_M16_X,Point_M16_Y,Point_M17_X,Point_M17_Y,Point_M18_X,Point_M18_Y,Point_M19_X,Point_M19_Y,Point_M20_X,Point_M20_Y,Point_M21_X,Point_M21_Y,Point_M22_X,Point_M22_Y,Point_M23_X,Point_M23_Y,Point_M24_X,Point_M24_Y,Point_M25_X,Point_M25_Y,Point_M26_X,Point_M26_Y,Point_M27_X,Point_M27_Y,Point_M28_X,Point_M28_Y,Point_M29_X,Point_M29_Y\n"
@@ -115,16 +115,16 @@ class ThousandLandmarksDataset(data.Dataset):
 
         print(f"N_rows: {num_lines}")
 
-        train_set = set()
-        val_set = set()
+        # train_set = set()
+        # val_set = set()
 
-        kf = KFold(n_splits=5, random_state=42, shuffle=True)
-        for i, (train_index, val_index) in enumerate(kf.split(range(num_lines))):
-            if i == fold:
-                train_set.update(set(train_index))
-                val_set.update(set(val_index))
-                print(f"Spliting data for fold {fold}. TRAIN: {len(train_index)}. TEST: {len(val_index)}")
-                break
+        # kf = KFold(n_splits=5, random_state=42, shuffle=True)
+        # for i, (train_index, val_index) in enumerate(kf.split(range(num_lines))):
+        #     if i == fold:
+        #         train_set.update(set(train_index))
+        #         val_set.update(set(val_index))
+        #         print(f"Spliting data for fold {fold}. TRAIN: {len(train_index)}. TEST: {len(val_index)}")
+        #         break
 
         num_lines -= 1  # header
 
@@ -134,10 +134,19 @@ class ThousandLandmarksDataset(data.Dataset):
                     break
                 if i == 0:
                     continue  # skip header
-                if split == "train" and i not in train_set:  # == int(TRAIN_SIZE * num_lines):
-                    continue  # reached end of train part of data
-                elif split == "val" and i not in val_set:  # < int(TRAIN_SIZE * num_lines):
+                if split == "train" and i == int(TRAIN_SIZE * num_lines):
+                    break  # reached end of train part of data
+                elif split == "val" and i < int(TRAIN_SIZE * num_lines):
                     continue  # has not reached start of val part of data
+                # if i > 1024:
+                #     break
+                # if i == 0:
+                #     continue  # skip header
+                # if split == "train" and i not in train_set:  # == int(TRAIN_SIZE * num_lines):
+                #     continue  # reached end of train part of data
+                # elif split == "val" and i not in val_set:  # < int(TRAIN_SIZE * num_lines):
+                #     continue  # has not reached start of val part of data
+                # sdfsdfываыва
                 elements = line.strip().split("\t")
                 image_name = os.path.join(images_root, elements[0])
                 self.image_names.append(image_name)

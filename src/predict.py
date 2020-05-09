@@ -76,16 +76,16 @@ print("Creating model...")
 device = torch.device("cuda: 0")
 torch.cuda.set_device(device)
 
-model = models.resnet50(pretrained=True)
+model = models.resnet101(pretrained=True)
 model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
 model.to(device)
 
 # 3. predict
 test_dataset = ThousandLandmarksDataset(os.path.join('../data', 'test'), train_transforms, split="test")
-test_dataloader = data.DataLoader(test_dataset, batch_size=128, num_workers=0, pin_memory=True,
+test_dataloader = data.DataLoader(test_dataset, batch_size=1024, num_workers=0, pin_memory=True,
                                   shuffle=False, drop_last=False)
 
-name = '../history/weights/5folds_resnet_50_bs_256/fold2_ep27_loss1.622'
+name = '../history/weights/resnet101_bs_240_0.95_30ep/fold0_ep21_loss1.585'
 with open(f"{name}.pth", "rb") as fp:
     best_state_dict = torch.load(fp, map_location="cpu")
     model.load_state_dict(best_state_dict)
