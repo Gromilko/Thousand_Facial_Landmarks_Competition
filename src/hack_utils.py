@@ -63,6 +63,21 @@ class HorizontalFlip(object):
         return sample
 
 
+class MyCoarseDropout(object):
+    def __init__(self, p=0.5, elem_name='image'):
+        self.p = p
+        self.elem_name = elem_name
+
+    def __call__(self, sample):
+        augmented = albu.Compose([albu.CoarseDropout(max_holes=4, max_height=20, max_width=20,
+                                                     min_holes=2, min_height=10, min_width=10,
+                                                     fill_value=np.random.randint(0, 255, 1), p=self.p)],
+                                 )(image=sample[self.elem_name],)
+
+        sample[self.elem_name] = augmented['image']
+        return sample
+
+
 class CropCenter(object):
     def __init__(self, size=128, elem_name='image'):
         self.size = size

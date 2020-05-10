@@ -22,7 +22,7 @@ from torchvision.models._utils import IntermediateLayerGetter
 
 from src.EarlyStopping import EarlyStopping
 from src.hack_utils import NUM_PTS, CROP_SIZE
-from src.hack_utils import ScaleMinSideToSize, CropCenter, TransformByKeys, HorizontalFlip
+from src.hack_utils import ScaleMinSideToSize, CropCenter, TransformByKeys, HorizontalFlip, MyCoarseDropout
 from src.hack_utils import ThousandLandmarksDataset
 
 torch.backends.cudnn.deterministic = True
@@ -50,6 +50,8 @@ def train(model, loader, loss_fn, optimizer, device):
     train_loss = []
     for batch in tqdm.tqdm(loader, total=len(loader), desc="training..."):
         images = batch["image"].to(device)  # B x 3 x CROP_SIZE x CROP_SIZE
+        for i, t in enumerate(images):
+            torchvision.utils.save_image(t, f"history/alb_test/{i}.png")
         landmarks = batch["landmarks"]  # B x (2 * NUM_PTS)
 
         pred_landmarks = model(images).cpu()  # B x (2 * NUM_PTS)
@@ -140,6 +142,7 @@ class Trainer:
 train_transforms = transforms.Compose([
     ScaleMinSideToSize((CROP_SIZE, CROP_SIZE)),
     CropCenter(CROP_SIZE),
+    MyCoarseDropout(p=1),
     # HorizontalFlip(0.5),
     TransformByKeys(transforms.ToPILImage(), ("image",)),
     TransformByKeys(transforms.ToTensor(), ("image",)),
@@ -242,6 +245,9 @@ def main(args):
     # new_m = torchvision.models._utils.IntermediateLayerGetter(model, return_layers=return_layers)
     # out = new_m(torch.rand(1, 3, 224, 224))
     # print([(k, v.shape) for k, v in out.items()])
+
+    device = torch.device("cuda: 1")
+    torch.cuda.set_device(device)
 
     for fold in range(0, 1):
         print("Creating model...")
