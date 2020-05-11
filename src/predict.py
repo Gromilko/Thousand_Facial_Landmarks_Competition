@@ -20,7 +20,7 @@ train_transforms = transforms.Compose([
     CropCenter(CROP_SIZE),
     TransformByKeys(transforms.ToPILImage(), ("image",)),
     TransformByKeys(transforms.ToTensor(), ("image",)),
-    TransformByKeys(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]), ("image",)),
+    # TransformByKeys(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]), ("image",)),
 ])
 
 
@@ -85,7 +85,7 @@ test_dataset = ThousandLandmarksDataset(os.path.join('../data', 'test'), train_t
 test_dataloader = data.DataLoader(test_dataset, batch_size=1024, num_workers=0, pin_memory=True,
                                   shuffle=False, drop_last=False)
 
-name = '../history/weights/resnet101_bs_240_0.95_30ep/fold0_ep21_loss1.585'
+name = '../history/weights/finetuning_albu/fold0_ep6_loss1.14'
 with open(f"{name}.pth", "rb") as fp:
     best_state_dict = torch.load(fp, map_location="cpu")
     model.load_state_dict(best_state_dict)

@@ -51,7 +51,7 @@ def train(model, loader, loss_fn, optimizer, device):
     for batch in tqdm.tqdm(loader, total=len(loader), desc="training..."):
         images = batch["image"].to(device)  # B x 3 x CROP_SIZE x CROP_SIZE
         for i, t in enumerate(images):
-            torchvision.utils.save_image(t, f"history/alb_test/{i}.png")
+            torchvision.utils.save_image(t, f"history/alb_test/{i}_1.png")
         landmarks = batch["landmarks"]  # B x (2 * NUM_PTS)
 
         pred_landmarks = model(images).cpu()  # B x (2 * NUM_PTS)
@@ -146,7 +146,7 @@ train_transforms = transforms.Compose([
     # HorizontalFlip(0.5),
     TransformByKeys(transforms.ToPILImage(), ("image",)),
     TransformByKeys(transforms.ToTensor(), ("image",)),
-    TransformByKeys(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]), ("image",)),
+    # TransformByKeys(transforms.Normalize(mean=[0.40, 0.32, 0.28], std=[0.34, 0.29, 0.27]), ("image",)),
 ])
 
 
@@ -246,7 +246,7 @@ def main(args):
     # out = new_m(torch.rand(1, 3, 224, 224))
     # print([(k, v.shape) for k, v in out.items()])
 
-    device = torch.device("cuda: 1")
+    device = torch.device("cuda: 0")
     torch.cuda.set_device(device)
 
     for fold in range(0, 1):
@@ -256,13 +256,15 @@ def main(args):
 
         # models.detection.keypointrcnn_resnet50_fpn()
 
-        # name = 'history/weights/resneXt101_234layer/ep18_loss1.54'
-        # with open(f"{name}.pth", "rb") as fp:
-        #     best_state_dict = torch.load(fp, map_location="cpu")
-        #     model.load_state_dict(best_state_dict)
+        name = 'history/weights/finetuning_albu/resnet101_pretrain_bs240_ep14_loss1.5272085521721188_best'
+        with open(f"{name}.pth", "rb") as fp:
+            best_state_dict = torch.load(fp, map_location="cpu")
+            model.load_state_dict(best_state_dict)
 
         args.epochs = 23
         args.batch_size = 240
+        args.learning_rate = 1e-4
+
         trainer = Trainer(model, fold=fold)
         get_stat(model)
         end_epoch = trainer.start()
