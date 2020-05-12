@@ -16,9 +16,9 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 
 from src.EarlyStopping import EarlyStopping
-from src.hack_utils import NUM_PTS, CROP_SIZE
-from src.hack_utils import ScaleMinSideToSize, CropCenter, TransformByKeys, MyCoarseDropout
-from src.hack_utils import ThousandLandmarksDataset
+from src.utils import NUM_PTS, CROP_SIZE
+from src.utils import ScaleMinSideToSize, CropCenter, TransformByKeys, MyCoarseDropout
+from src.utils import ThousandLandmarksDataset
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False

@@ -8,10 +8,10 @@ from torch import nn
 from torch.utils import data
 from torchvision import models, transforms
 
-from src.hack_utils import NUM_PTS, CROP_SIZE, restore_landmarks_batch
-from src.hack_utils import ScaleMinSideToSize, CropCenter, TransformByKeys
-from src.hack_utils import ThousandLandmarksDataset
-from src.hack_utils import create_submission
+from src.utils import NUM_PTS, CROP_SIZE, restore_landmarks_batch
+from src.utils import ScaleMinSideToSize, CropCenter, TransformByKeys
+from src.utils import ThousandLandmarksDataset
+from src.utils import create_submission
 
 train_transforms = transforms.Compose([
     ScaleMinSideToSize((CROP_SIZE, CROP_SIZE)),
