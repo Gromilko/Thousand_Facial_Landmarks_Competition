@@ -13,8 +13,6 @@ from src.hack_utils import ScaleMinSideToSize, CropCenter, TransformByKeys
 from src.hack_utils import ThousandLandmarksDataset
 from src.hack_utils import create_submission
 
-import albumentations as albu
-
 train_transforms = transforms.Compose([
     ScaleMinSideToSize((CROP_SIZE, CROP_SIZE)),
     CropCenter(CROP_SIZE),
@@ -22,18 +20,6 @@ train_transforms = transforms.Compose([
     TransformByKeys(transforms.ToTensor(), ("image",)),
     # TransformByKeys(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]), ("image",)),
 ])
-
-
-def aug_image(image):
-    augmented = albu.Compose([albu.HorizontalFlip(p=1)], p=1)(force_apply=True, image=image)
-    return augmented['image']
-
-
-def aug_image_with_points(image, points):
-    augmented = albu.Compose([albu.HorizontalFlip(p=1)], p=1,
-                             keypoint_params=albu.KeypointParams(format='xy'))(force_apply=True, image=image,
-                                                                               keypoints=points)
-    return augmented['image'], augmented['keypoints']
 
 
 class Predictor:
@@ -45,15 +31,7 @@ class Predictor:
 
     def __call__(self, tta=False):
         self.model.eval()
-
         if tta:
-            # tr = transforms.Lambda(lambda image: torch.stack([
-            #     transforms.ToPILImage()(image),
-            #     transforms.RandomHorizontalFlip(p=1.0)(image)
-            # ]))
-            # for i, batch in enumerate(tqdm.tqdm(self.loader, total=len(self.loader), desc="test prediction...")):
-            #     tran = tr(batch["image"])
-            #     print()
             raise NotImplementedError
         else:
             predictions = np.zeros((len(self.loader.dataset), NUM_PTS, 2))

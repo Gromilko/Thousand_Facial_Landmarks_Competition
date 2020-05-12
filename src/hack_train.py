@@ -23,8 +23,6 @@ from src.hack_utils import ThousandLandmarksDataset
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-writer = SummaryWriter('runs/trainer_{}'.format(time.strftime("%y-%m-%d %H:%M", time.gmtime())))
-
 
 def parse_arguments():
     parser = ArgumentParser(__doc__)
@@ -38,7 +36,18 @@ def parse_arguments():
     return parser.parse_args()
 
 
+train_transforms = transforms.Compose([
+    ScaleMinSideToSize((CROP_SIZE, CROP_SIZE)),
+    CropCenter(CROP_SIZE),
+    MyCoarseDropout(p=0.5),
+    TransformByKeys(transforms.ToPILImage(), ("image",)),
+    TransformByKeys(transforms.ToTensor(), ("image",)),
+    # TransformByKeys(transforms.Normalize(mean=[0.40, 0.32, 0.28], std=[0.34, 0.29, 0.27]), ("image",)),
+])
+
+
 def data_provider(split=None, fold=None):
+    """ return pytorch Dataloader for train or validation mode"""
 
     print(f"Reading {split} data for fold={fold}...")
     if split == "train":
@@ -111,11 +120,15 @@ class Trainer:
 
         self.early_stopping = EarlyStopping(patience=5, verbose=True)
 
+        # print some information about the newly created dataloaders
         for phase in ["train", "val"]:
             print(f'{phase} dataset len=', len(self.dataloaders[phase]))
 
     def start(self, start_with=0):
         # 2. train & validate
+        writer = SummaryWriter(
+            f'history/runs/trainer_{time.strftime("%y-%m-%d %H:%M", time.gmtime())}_fold_{self.fold}'
+        )
         print("Ready for training...")
         best_val_loss = np.inf
         for epoch in range(start_with, args.epochs + start_with):
@@ -147,17 +160,6 @@ class Trainer:
         return epoch + 1
 
 
-train_transforms = transforms.Compose([
-    ScaleMinSideToSize((CROP_SIZE, CROP_SIZE)),
-    CropCenter(CROP_SIZE),
-    MyCoarseDropout(p=1),
-    # HorizontalFlip(0.5), # not implemented
-    TransformByKeys(transforms.ToPILImage(), ("image",)),
-    TransformByKeys(transforms.ToTensor(), ("image",)),
-    # TransformByKeys(transforms.Normalize(mean=[0.40, 0.32, 0.28], std=[0.34, 0.29, 0.27]), ("image",)),
-])
-
-
 def get_stat(model):
     """ helper function considers how many parameters will be trained and how many are frozen"""
     count = 0
@@ -182,7 +184,7 @@ def main(args):
     device = torch.device("cuda: 0")
     torch.cuda.set_device(device)
 
-    for fold in range(0, 5):
+    for fold in range(0, 2):
         print("Creating model...")
         model = models.resnet18(pretrained=True, )
         model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
@@ -193,15 +195,25 @@ def main(args):
         #     best_state_dict = torch.load(fp, map_location="cpu")
         #     model.load_state_dict(best_state_dict)
 
-        args.epochs = 2
+        # # freeze all layers
+        # for param in model.parameters():
+        #     param.requires_grad = False
+        #
+        # # train only head
+        # model.fc.weight.requires_grad = True
+        # model.fc.bias.requires_grad = True
+        #
+        # # train layer4
+        # for param in model.layer4.parameters():
+        #     param.requires_grad = True
+
+        args.epochs = 5
         args.batch_size = 240
         args.learning_rate = 1e-4
 
         trainer = Trainer(model, fold=fold)
         get_stat(model)
         trainer.start()
-
-    print('stop')
 
 
 if __name__ == '__main__':

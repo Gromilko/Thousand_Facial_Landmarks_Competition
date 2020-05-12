@@ -15,14 +15,6 @@ submit_list = ['../stack/resnet152_pretrain3ep_plus_6ep_bs160_ep8_loss1.52988806
                '../history/weights/finetuning_albu/fold0_ep2_loss1.17_submit.csv'  # 9.57968
                ]
 
-
-# submit_list = ['../history/weights/5folds_resnet_50_bs_256/fold0_ep26_loss1.611_submit.csv',
-#                '../history/weights/5folds_resnet_50_bs_256/fold1_ep24_loss1.576_submit.csv',
-#                '../history/weights/5folds_resnet_50_bs_256/fold2_ep27_loss1.622_submit.csv',
-#
-#                ]
-
-
 dfs_list = []
 
 for path in submit_list:

@@ -14,10 +14,17 @@ import albumentations as albu
 np.random.seed(1234)
 torch.manual_seed(1234)
 
-TRAIN_SIZE = 0.95
+TRAIN_SIZE = 0.8
 NUM_PTS = 971
 CROP_SIZE = 128
-SUBMISSION_HEADER = "file_name,Point_M0_X,Point_M0_Y,Point_M1_X,Point_M1_Y,Point_M2_X,Point_M2_Y,Point_M3_X,Point_M3_Y,Point_M4_X,Point_M4_Y,Point_M5_X,Point_M5_Y,Point_M6_X,Point_M6_Y,Point_M7_X,Point_M7_Y,Point_M8_X,Point_M8_Y,Point_M9_X,Point_M9_Y,Point_M10_X,Point_M10_Y,Point_M11_X,Point_M11_Y,Point_M12_X,Point_M12_Y,Point_M13_X,Point_M13_Y,Point_M14_X,Point_M14_Y,Point_M15_X,Point_M15_Y,Point_M16_X,Point_M16_Y,Point_M17_X,Point_M17_Y,Point_M18_X,Point_M18_Y,Point_M19_X,Point_M19_Y,Point_M20_X,Point_M20_Y,Point_M21_X,Point_M21_Y,Point_M22_X,Point_M22_Y,Point_M23_X,Point_M23_Y,Point_M24_X,Point_M24_Y,Point_M25_X,Point_M25_Y,Point_M26_X,Point_M26_Y,Point_M27_X,Point_M27_Y,Point_M28_X,Point_M28_Y,Point_M29_X,Point_M29_Y\n"
+SUBMISSION_HEADER = "file_name,Point_M0_X,Point_M0_Y,Point_M1_X,Point_M1_Y,Point_M2_X,Point_M2_Y,Point_M3_X," \
+                    "Point_M3_Y,Point_M4_X,Point_M4_Y,Point_M5_X,Point_M5_Y,Point_M6_X,Point_M6_Y,Point_M7_X," \
+                    "Point_M7_Y,Point_M8_X,Point_M8_Y,Point_M9_X,Point_M9_Y,Point_M10_X,Point_M10_Y,Point_M11_X," \
+                    "Point_M11_Y,Point_M12_X,Point_M12_Y,Point_M13_X,Point_M13_Y,Point_M14_X,Point_M14_Y,Point_M15_X," \
+                    "Point_M15_Y,Point_M16_X,Point_M16_Y,Point_M17_X,Point_M17_Y,Point_M18_X,Point_M18_Y,Point_M19_X," \
+                    "Point_M19_Y,Point_M20_X,Point_M20_Y,Point_M21_X,Point_M21_Y,Point_M22_X,Point_M22_Y,Point_M23_X," \
+                    "Point_M23_Y,Point_M24_X,Point_M24_Y,Point_M25_X,Point_M25_Y,Point_M26_X,Point_M26_Y,Point_M27_X," \
+                    "Point_M27_Y,Point_M28_X,Point_M28_Y,Point_M29_X,Point_M29_Y\n "
 
 LEN_DF = 393930
 CHUNK_SIZE = 50000
@@ -43,23 +50,6 @@ class ScaleMinSideToSize(object):
             landmarks = landmarks * f
             sample['landmarks'] = landmarks.reshape(-1)
 
-        return sample
-
-
-class HorizontalFlip(object):
-    def __init__(self, p=0.5, elem_name='image'):
-        self.p = p
-        self.elem_name = elem_name
-
-    def __call__(self, sample):
-        # pred_landmarks = pred_landmarks.numpy().reshape((len(pred_landmarks), NUM_PTS, 2))
-        augmented = albu.Compose([albu.HorizontalFlip(p=self.p)],
-                                 keypoint_params=albu.KeypointParams(format='xy')
-                                 )(force_apply=True,
-                                   image=sample[self.elem_name],
-                                   keypoints=torch.reshape(sample['landmarks'], (NUM_PTS, 2)))
-
-        sample[self.elem_name], sample['landmarks'] = augmented['image'], torch.reshape(augmented['keypoints'], (NUM_PTS*2))
         return sample
 
 
@@ -126,42 +116,34 @@ class ThousandLandmarksDataset(data.Dataset):
         self.landmarks = []
 
         with open(landmark_file_name, "rt") as fp:
-            num_lines = sum(1 for line in fp)
+            num_lines = sum(1 for _ in fp)
 
         print(f"N_rows: {num_lines}")
 
-        # train_set = set()
-        # val_set = set()
-
-        # kf = KFold(n_splits=5, random_state=42, shuffle=True)
-        # for i, (train_index, val_index) in enumerate(kf.split(range(num_lines))):
-        #     if i == fold:
-        #         train_set.update(set(train_index))
-        #         val_set.update(set(val_index))
-        #         print(f"Spliting data for fold {fold}. TRAIN: {len(train_index)}. TEST: {len(val_index)}")
-        #         break
+        # split data into 5 folds
+        train_set = set()
+        val_set = set()
+        kf = KFold(n_splits=5, random_state=42, shuffle=True)
+        for i, (train_index, val_index) in enumerate(kf.split(range(num_lines))):
+            if i == fold:
+                train_set.update(set(train_index))
+                val_set.update(set(val_index))
+                print(f"Spliting data for fold {fold}. TRAIN: {len(train_index)}. TEST: {len(val_index)}")
+                break
 
         num_lines -= 1  # header
 
         with open(landmark_file_name, "rt") as fp:
             for i, line in tqdm.tqdm(enumerate(fp)):
-                if i > 256:
+                if i > 512:
                     break
                 if i == 0:
                     continue  # skip header
-                if split == "train" and i == int(TRAIN_SIZE * num_lines):
-                    break  # reached end of train part of data
-                elif split == "val" and i < int(TRAIN_SIZE * num_lines):
+                if split == "train" and i not in train_set:  # == int(TRAIN_SIZE * num_lines):
+                    continue  # reached end of train part of data
+                elif split == "val" and i not in val_set:  # < int(TRAIN_SIZE * num_lines):
                     continue  # has not reached start of val part of data
-                # if i > 1024:
-                #     break
-                # if i == 0:
-                #     continue  # skip header
-                # if split == "train" and i not in train_set:  # == int(TRAIN_SIZE * num_lines):
-                #     continue  # reached end of train part of data
-                # elif split == "val" and i not in val_set:  # < int(TRAIN_SIZE * num_lines):
-                #     continue  # has not reached start of val part of data
-                # sdfsdfываыва
+
                 elements = line.strip().split("\t")
                 image_name = os.path.join(images_root, elements[0])
                 self.image_names.append(image_name)
@@ -179,53 +161,6 @@ class ThousandLandmarksDataset(data.Dataset):
 
         self.transforms = transforms
         print(f'finish')
-
-    # def __init__(self, root, transforms, split="train", **kwargs):
-    #     super(ThousandLandmarksDataset, self).__init__()
-    #     self.root = root
-    #     landmark_file_name = os.path.join(root, 'landmarks.csv') if split is not "test" \
-    #         else os.path.join(root, "test_points.csv")
-    #     images_root = os.path.join(root, "images")
-    #
-    #     # 393930 the number of rows in the training dataset
-    #     # change to a smaller number if you need to learn from a piece of data
-    #     n_rows = 2048 if split is not "test" else None
-    #     print(f"Cook {split} data from csv...")
-    #
-    #     df_chunk = pd.read_csv(landmark_file_name, nrows=n_rows, chunksize=CHUNK_SIZE, delimiter='\t', )
-    #     self.landmarks = []
-    #     self.image_names = []
-    #
-    #     print(f"Chunk...", end=' ')
-    #     for i, chunk in enumerate(df_chunk):
-    #         split_idxs = {"train": range(0, int(TRAIN_SIZE * len(chunk))),
-    #                       "val": range(int(TRAIN_SIZE * len(chunk)), len(chunk)),
-    #                       "test": range(len(chunk))}
-    #         idxs = split_idxs[split]
-    #
-    #         print(f'{i}...', end=' ')
-    #         if split in ("train", "val"):
-    #             for row in chunk._values[idxs]:
-    #                 self.image_names.append(os.path.join(images_root, row[0]))
-    #                 self.landmarks.append(row[1:].astype('int32').reshape((len(row) // 2, 2)))
-    #         elif split == 'test':
-    #             for row in chunk._values[idxs]:
-    #                 self.image_names.append(os.path.join(images_root, row[0]))
-    #             self.landmarks = None
-    #         else:
-    #             raise NotImplementedError(split)
-    #     print(f'finish')
-    #
-    #     print('Convert to tensor...', end=' ')
-    #     if split in ("train", "val"):
-    #         self.landmarks = torch.as_tensor(self.landmarks)
-    #     elif split == 'test':
-    #         self.landmarks = None
-    #     else:
-    #         raise NotImplementedError(split)
-    #
-    #     self.transforms = transforms
-    #     print('finish')
 
     def __getitem__(self, idx):
         sample = {}
