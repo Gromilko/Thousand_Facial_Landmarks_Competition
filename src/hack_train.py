@@ -1,5 +1,3 @@
-"""Script for baseline training. Model is ResNet18 (pretrained on ImageNet). Training takes ~ 15 mins (@ GTX 1080Ti)."""
-
 import os
 import sys
 import time
@@ -9,7 +7,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torchvision
 import torchvision.models as models
 import tqdm
 from torch.nn import functional as fnn
@@ -17,12 +14,10 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, CyclicLR
 from torch.utils import data
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
-from torchvision.models._utils import IntermediateLayerGetter
-
 
 from src.EarlyStopping import EarlyStopping
 from src.hack_utils import NUM_PTS, CROP_SIZE
-from src.hack_utils import ScaleMinSideToSize, CropCenter, TransformByKeys, HorizontalFlip, MyCoarseDropout
+from src.hack_utils import ScaleMinSideToSize, CropCenter, TransformByKeys, MyCoarseDropout
 from src.hack_utils import ThousandLandmarksDataset
 
 torch.backends.cudnn.deterministic = True
@@ -30,8 +25,6 @@ torch.backends.cudnn.benchmark = False
 
 writer = SummaryWriter('runs/trainer_{}'.format(time.strftime("%y-%m-%d %H:%M", time.gmtime())))
 
-
-# resnet50 bs = 350
 
 def parse_arguments():
     parser = ArgumentParser(__doc__)
@@ -45,13 +38,31 @@ def parse_arguments():
     return parser.parse_args()
 
 
+def data_provider(split=None, fold=None):
+
+    print(f"Reading {split} data for fold={fold}...")
+    if split == "train":
+        train_dataset = ThousandLandmarksDataset(os.path.join(args.data, 'train'),
+                                                 train_transforms, split="train", fold=fold)
+        return data.DataLoader(train_dataset,
+                               batch_size=args.batch_size, num_workers=0,
+                               pin_memory=True, shuffle=True, drop_last=True)
+    elif split == "val":
+        val_dataset = ThousandLandmarksDataset(os.path.join(args.data, 'train'),
+                                               train_transforms, split="val", fold=fold)
+        return data.DataLoader(val_dataset,
+                               batch_size=args.batch_size, num_workers=0,
+                               pin_memory=True, shuffle=False, drop_last=False)
+    else:
+        # TODO: exception
+        print('Bad split value')
+
+
 def train(model, loader, loss_fn, optimizer, device):
     model.train()
     train_loss = []
     for batch in tqdm.tqdm(loader, total=len(loader), desc="training..."):
         images = batch["image"].to(device)  # B x 3 x CROP_SIZE x CROP_SIZE
-        for i, t in enumerate(images):
-            torchvision.utils.save_image(t, f"history/alb_test/{i}_1.png")
         landmarks = batch["landmarks"]  # B x (2 * NUM_PTS)
 
         pred_landmarks = model(images).cpu()  # B x (2 * NUM_PTS)
@@ -111,30 +122,27 @@ class Trainer:
             train_loss = train(self.model, self.dataloaders['train'], self.loss_fn, self.optimizer, device=self.device)
             val_loss = validate(self.model, self.dataloaders['val'], self.loss_fn, device=self.device)
 
-            writer.add_scalars('loss', {'train': train_loss,
-                                        'val': val_loss}, epoch)
+            writer.add_scalars('loss', {'train': train_loss, 'val': val_loss}, epoch)
 
             print("Epoch #{:2}:\ttrain loss: {:7.4}\tval loss: {:7.4}".format(epoch, train_loss, val_loss))
 
-            # self.scheduler.step(val_loss, epoch)
-            # self.early_stopping(val_loss, self.model)
-            #
-            # if self.early_stopping.early_stop:
-            #     print("Early stopping")
-            #     break
+            self.scheduler.step(val_loss, epoch)
+            self.early_stopping(val_loss, self.model)
+
+            if self.early_stopping.early_stop:
+                print("Early stopping")
+                break
 
             for group_num, param_group in enumerate(self.optimizer.param_groups):
                 writer.add_scalar('lr/{}'.format(group_num), param_group['lr'], epoch)
 
-            # if val_loss <= best_val_loss:
-            best_val_loss = val_loss
-            if not os.path.exists(self.hist_dir):
-                os.mkdir(self.hist_dir)
-            with open(os.path.join(self.hist_dir, "fold{}_ep{}_loss{:.4}.pth".format(self.fold, epoch, val_loss)), "wb") as fp:
-                torch.save(self.model.state_dict(), fp)
-
-        with open(os.path.join(self.hist_dir, "finish.pth"), "wb") as fp:
-            torch.save(self.model.state_dict(), fp)
+            if val_loss <= best_val_loss:
+                best_val_loss = val_loss
+                if not os.path.exists(self.hist_dir):
+                    os.mkdir(self.hist_dir)
+                with open(os.path.join(self.hist_dir, "fold{}_ep{}_loss{:.4}.pth".format(self.fold, epoch, val_loss)),
+                          "wb") as fp:
+                    torch.save(self.model.state_dict(), fp)
 
         return epoch + 1
 
@@ -143,133 +151,57 @@ train_transforms = transforms.Compose([
     ScaleMinSideToSize((CROP_SIZE, CROP_SIZE)),
     CropCenter(CROP_SIZE),
     MyCoarseDropout(p=1),
-    # HorizontalFlip(0.5),
+    # HorizontalFlip(0.5), # not implemented
     TransformByKeys(transforms.ToPILImage(), ("image",)),
     TransformByKeys(transforms.ToTensor(), ("image",)),
     # TransformByKeys(transforms.Normalize(mean=[0.40, 0.32, 0.28], std=[0.34, 0.29, 0.27]), ("image",)),
 ])
 
 
-def data_provider(split=None, fold=None):
-    print(f"Reading {split} data for fold={fold}...")
-    if split == "train":
-        train_dataset = ThousandLandmarksDataset(os.path.join(args.data, 'train'),
-                                                 train_transforms, split="train", fold=fold)
-        dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=0,
-                                     pin_memory=True, shuffle=True, drop_last=True)
-    elif split == "val":
-        val_dataset = ThousandLandmarksDataset(os.path.join(args.data, 'train'),
-                                               train_transforms, split="val", fold=fold)
-        dataloader = data.DataLoader(val_dataset, batch_size=args.batch_size, num_workers=0,
-                                     pin_memory=True, shuffle=False, drop_last=False)
-    else:
-        # TODO: exception
-        print('Bad split value')
-
-    return dataloader
-
-
 def get_stat(model):
-    print()
+    """ helper function considers how many parameters will be trained and how many are frozen"""
     count = 0
     for param in model.parameters():
         count += 1
-    print('Вcего параметров', count)
+    print('Total parameters', count)
 
     count = 0
     for param in model.parameters():
         if param.requires_grad:
             count += 1
-    print('True параметров', count)
+    print('True parameters', count)
 
     count = 0
     for param in model.parameters():
         if not param.requires_grad:
             count += 1
-    print('False параметров', count)
-    print()
-
-
-def freeze_layers(model):
-    # freeze all layers
-    for param in model.parameters():
-        param.requires_grad = False
-
-    # print('train only head')
-    model.fc.weight.requires_grad = True
-    model.fc.bias.requires_grad = True
-
-    # trainer = Trainer(model, dataloaders)
-    # get_stat(model)
-    # args.epochs = 5
-    # end_epoch = trainer.start()
-
-    # print('train layer4 and head')
-    # args.epochs = 10
-    # train only head
-    for param in model.layer4.parameters():
-        param.requires_grad = True
-
-    # trainer = Trainer(model, dataloaders)
-    # get_stat(model)
-    # end_epoch = trainer.start(start_with=end_epoch)
-    #
-    # print('train layer3 and head')
-    # train only head
-    for param in model.layer3.parameters():
-        param.requires_grad = True
-
-    # args.epochs = 15
-    # trainer = Trainer(model, dataloaders)
-    # get_stat(model)
-    # end_epoch = trainer.start(start_with=end_epoch)
-
-    print('train layer2 and head')
-    # train only head
-    for param in model.layer2.parameters():
-        param.requires_grad = True
-
-    # with open(f"history/weights/resnet50_layer_wise/ep38_loss1.745.pth", "rb") as fp:
-    #     best_state_dict = torch.load(fp, map_location="cpu")
-    #     model.load_state_dict(best_state_dict)
-
+    print('False parameters', count)
 
 
 def main(args):
-    # model = torchvision.models.(pretrained=True)
-    # # https://discuss.pytorch.org/t/how-to-perform-finetuning-in-pytorch/419/19
-    # features = nn.Sequential(*list(model.children())[:-2])
-    # out = features(torch.rand(1, 3, 224, 224))
-    # # extract layer1 and layer3, giving as names `feat1` and feat2`
-    # return_layers = {'conv1': 'conv1', 'maxpool': 'maxpool',   'layer1': '1', 'layer2': '2', 'layer3': '3', 'layer4': '4'}
-    # new_m = torchvision.models._utils.IntermediateLayerGetter(model, return_layers=return_layers)
-    # out = new_m(torch.rand(1, 3, 224, 224))
-    # print([(k, v.shape) for k, v in out.items()])
-
     device = torch.device("cuda: 0")
     torch.cuda.set_device(device)
 
-    for fold in range(0, 1):
+    for fold in range(0, 5):
         print("Creating model...")
-        model = models.resnet101(pretrained=True, )
+        model = models.resnet18(pretrained=True, )
         model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
 
-        # models.detection.keypointrcnn_resnet50_fpn()
+        # if you want to start training with some kind of checkpoint, uncomment the code below
+        # name = 'history/weights/CHECKPOINT_DIR/CHECKPOINT_PATH'
+        # with open(f"{name}", "rb") as fp:
+        #     best_state_dict = torch.load(fp, map_location="cpu")
+        #     model.load_state_dict(best_state_dict)
 
-        name = 'history/weights/finetuning_albu/resnet101_pretrain_bs240_ep14_loss1.5272085521721188_best'
-        with open(f"{name}.pth", "rb") as fp:
-            best_state_dict = torch.load(fp, map_location="cpu")
-            model.load_state_dict(best_state_dict)
-
-        args.epochs = 23
+        args.epochs = 2
         args.batch_size = 240
         args.learning_rate = 1e-4
 
         trainer = Trainer(model, fold=fold)
         get_stat(model)
-        end_epoch = trainer.start()
+        trainer.start()
 
-    input('vse')
+    print('stop')
 
 
 if __name__ == '__main__':
