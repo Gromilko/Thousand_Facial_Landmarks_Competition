@@ -27,7 +27,6 @@ SUBMISSION_HEADER = "file_name,Point_M0_X,Point_M0_Y,Point_M1_X,Point_M1_Y,Point
                     "Point_M27_Y,Point_M28_X,Point_M28_Y,Point_M29_X,Point_M29_Y\n "
 
 LEN_DF = 393930
-CHUNK_SIZE = 50000
 
 
 class ScaleMinSideToSize(object):
@@ -135,8 +134,9 @@ class ThousandLandmarksDataset(data.Dataset):
 
         with open(landmark_file_name, "rt") as fp:
             for i, line in tqdm.tqdm(enumerate(fp)):
-                if i > 512:
-                    break
+                # for quick check
+                # if i > 512:
+                #     break
                 if i == 0:
                     continue  # skip header
                 if split == "train" and i not in train_set:  # == int(TRAIN_SIZE * num_lines):

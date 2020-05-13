@@ -63,16 +63,19 @@ test_dataset = ThousandLandmarksDataset(os.path.join('../data', 'test'), train_t
 test_dataloader = data.DataLoader(test_dataset, batch_size=1024, num_workers=0, pin_memory=True,
                                   shuffle=False, drop_last=False)
 
-name = '../history/weights/finetuning_albu/fold0_ep6_loss1.14'
-with open(f"{name}.pth", "rb") as fp:
+# weight path without extension pth
+weight_path = '../history/weights/finetuning_albu/fold0_ep6_loss1.14'
+with open(f"{weight_path}.pth", "rb") as fp:
     best_state_dict = torch.load(fp, map_location="cpu")
     model.load_state_dict(best_state_dict)
 
 predictor = Predictor(model, test_dataloader, device)
 test_predictions = predictor(tta=False)
 
+# if you want to visualize the predictions of your model,
+# save your predictions in a pkl-file
 # with open(f"{name}_test_predictions.pkl", "wb") as fp:
 #     pickle.dump({"image_names": test_dataset.image_names,
 #                  "landmarks": test_predictions}, fp)
 
-create_submission('../data', test_predictions, f"{name}_submit.csv")
+create_submission('../data', test_predictions, f"{weight_path}_submit.csv")

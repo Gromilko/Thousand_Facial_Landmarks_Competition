@@ -63,8 +63,7 @@ def data_provider(split=None, fold=None):
                                batch_size=args.batch_size, num_workers=0,
                                pin_memory=True, shuffle=False, drop_last=False)
     else:
-        # TODO: exception
-        print('Bad split value')
+        raise ValueError("Illegal 'split' parameter value")
 
 
 def train(model, loader, loss_fn, optimizer, device):
@@ -101,7 +100,7 @@ def validate(model, loader, loss_fn, device):
 
 
 class Trainer:
-    def __init__(self, model, fold):
+    def __init__(self, model, fold=0):
         self.device = torch.device("cuda: 0") if args.gpu else torch.device("cpu")
         self.model = model.to(self.device)
 
@@ -149,6 +148,7 @@ class Trainer:
             for group_num, param_group in enumerate(self.optimizer.param_groups):
                 writer.add_scalar('lr/{}'.format(group_num), param_group['lr'], epoch)
 
+            # save weights only if model has improved score on validation
             if val_loss <= best_val_loss:
                 best_val_loss = val_loss
                 if not os.path.exists(self.hist_dir):
@@ -184,7 +184,12 @@ def main(args):
     device = torch.device("cuda: 0")
     torch.cuda.set_device(device)
 
-    for fold in range(0, 2):
+    # directory where will be saved model weights and tensorboard logs
+    if not os.path.exists('history'):
+        os.mkdir('history')
+
+    n_folds = 1  # only values in the range 1-5
+    for fold in range(0, n_folds):
         print("Creating model...")
         model = models.resnet18(pretrained=True, )
         model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
@@ -207,9 +212,11 @@ def main(args):
         # for param in model.layer4.parameters():
         #     param.requires_grad = True
 
-        args.epochs = 5
-        args.batch_size = 240
-        args.learning_rate = 1e-4
+        # if you do not want to list parameters in command line arguments,
+        # you can define them explicitly in code
+        # args.epochs = 5
+        # args.batch_size = 240
+        # args.learning_rate = 1e-4
 
         trainer = Trainer(model, fold=fold)
         get_stat(model)
