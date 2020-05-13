@@ -1,0 +1,8 @@
+albumentations==0.4.5
+scikit-learn==0.22.2
+pandas==1.0.3
+cv2==4.2.0
+torchvision==0.5.0
+tqdm==4.36.1
+torch==1.4.0
+numpy==1.17.4
